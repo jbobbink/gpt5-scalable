@@ -5,7 +5,7 @@ from typing import List, Optional
 from openai import OpenAI
 
 st.set_page_config(page_title="GPT-5 Prompt Runner", layout="wide")
-st.title("🔎 GPT-5 Prompt Runner with Web Search")
+st.title("🔎 GPT-5 Prompt Runner with Web Search & Debug Info")
 
 # --- API Key input ---
 api_key = st.text_input("Enter your OpenAI API Key:", type="password")
@@ -17,7 +17,7 @@ def ask_gpt5_with_web_search(
     reasoning_effort: str = "low"
 ):
     """
-    Ask GPT-5 with built-in web search, return answer + sources.
+    Ask GPT-5 with built-in web search, return answer + sources + full response dict.
     """
     tools = [{"type": "web_search"}]
     if allowed_domains:
@@ -58,7 +58,10 @@ def ask_gpt5_with_web_search(
     except Exception:
         pass
 
-    return response.output_text, sources, duration
+    # Convert response to plain JSON for inspection
+    full_json = json.loads(json.dumps(response, default=lambda o: getattr(o, "__dict__", str(o))))
+
+    return response.output_text, sources, duration, full_json
 
 
 if api_key:
@@ -67,7 +70,7 @@ if api_key:
     st.subheader("Prompts")
     prompts_text = st.text_area(
         "Enter prompts (one per line):",
-        placeholder="Example:\nWhat's the capital of France?\nWho is the current president of the United States?"
+        placeholder="Example:\nWho is Jan-Willem Bobbink?\nWhat's the capital of France?"
     )
 
     if st.button("Run Prompts"):
@@ -81,7 +84,7 @@ if api_key:
 
                 with st.spinner("Asking GPT-5..."):
                     try:
-                        answer, sources, duration = ask_gpt5_with_web_search(client, prompt)
+                        answer, sources, duration, full_json = ask_gpt5_with_web_search(client, prompt)
 
                         st.markdown("**Response:**")
                         st.write(answer)
@@ -92,6 +95,10 @@ if api_key:
                                 st.markdown(f"{j}. [{title}]({url})")
 
                         st.caption(f"⏱️ Duration: {duration:.2f} seconds")
+
+                        # --- Debug: full JSON output ---
+                        with st.expander("🔍 Full API Response (JSON)"):
+                            st.json(full_json)
 
                     except Exception as e:
                         st.error(f"Error: {e}")
