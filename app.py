@@ -2,57 +2,83 @@ import streamlit as st
 from openai import OpenAI
 
 st.set_page_config(page_title="GPT-5 Prompt Runner", layout="wide")
-st.title("🔎 GPT-5 Prompt Runner with Web Search")
+st.title("GPT-5 Prompt Runner with Web Search Function Tool")
 
-# --- API Key input ---
-api_key = st.text_input("Enter your OpenAI API Key:", type="password")
+api_key = st.text_input("Enter your OpenAI API key:", type="password")
 
 if api_key:
     client = OpenAI(api_key=api_key)
 
-    # --- Prompt input ---
     st.subheader("Prompts")
-    prompts_text = st.text_area(
-        "Enter prompts (one per line):",
-        placeholder="Example:\nWhat's the latest news on AI?\nCompare Fintiba and Expatrio for blocked accounts in Germany"
-    )
+    prompt_input = st.text_area("Enter prompts (one per line):")
 
     if st.button("Run Prompts"):
-        if not prompts_text.strip():
-            st.warning("Please enter at least one prompt.")
+        prompts = [p.strip() for p in prompt_input.split("\n") if p.strip()]
+        if not prompts:
+            st.warning("Enter at least one prompt.")
         else:
-            prompts = [p.strip() for p in prompts_text.split("\n") if p.strip()]
-            
-            for i, prompt in enumerate(prompts, start=1):
-                st.markdown(f"### Prompt {i}: {prompt}")
+            for i, prompt in enumerate(prompts, 1):
+                st.markdown(f"### Prompt {i}")
+                st.markdown(f"> {prompt}")
 
-                with st.spinner("Thinking..."):
+                with st.spinner("Running..."):
                     try:
                         response = client.chat.completions.create(
                             model="gpt-5",
                             messages=[
-                                {"role": "system", "content": "You are a helpful assistant."},
+                                {"role": "system", "content": "You are helpful assistant."},
                                 {"role": "user", "content": prompt}
                             ],
-                            tools=[{"type": "web_search"}],
-                            tool_choice="auto",  # let GPT decide when to search
+                            functions=[
+                                {
+                                    "name": "web_search",
+                                    "description": "Search the web for recent information relevant to the query",
+                                    "parameters": {
+                                        "type": "object",
+                                        "properties": {
+                                            "query": {"type": "string"}
+                                        },
+                                        "required": ["query"]
+                                    }
+                                }
+                            ],
+                            function_call="auto"  # or handle manually
                         )
 
-                        # Get model's answer
-                        answer = response.choices[0].message.content
-                        st.markdown("**Response:**")
-                        st.write(answer)
+                        message = response.choices[0].message
 
-                        # Show web search sources if available
-                        sources = getattr(response.choices[0].message, "refusal", None)
-                        if hasattr(response, "output") and hasattr(response.output, "references"):
-                            refs = response.output.references
-                            if refs:
-                                st.markdown("**Sources:**")
-                                for ref in refs:
-                                    st.write(f"- {ref['url']}")
+                        if message.get("function_call"):
+                            # GPT-5 decided to call the function
+                            func_name = message["function_call"]["name"]
+                            arguments = message["function_call"]["arguments"]
+                            # Do your function: e.g. call a web search API using arguments['query']
+                            search_query = arguments.get("query")
+                            # Here implement search, e.g. via requests to search engine:
+                            search_results = your_web_search_api(search_query)
+
+                            # Then send another message containing the function result
+                            follow_up = client.chat.completions.create(
+                                model="gpt-5",
+                                messages=[
+                                    {"role": "system", "content": "You are helpful assistant."},
+                                    {"role": "user", "content": prompt},
+                                    {
+                                        "role": "function",
+                                        "name": func_name,
+                                        "content": search_results
+                                    }
+                                ]
+                            )
+                            final_answer = follow_up.choices[0].message.content
+                            st.markdown("**Response:**")
+                            st.write(final_answer)
+                            st.markdown("**Web search results:**")
+                            st.text(search_results)
+
+                        else:
+                            # No function call, normal answer
+                            st.markdown("**Response:**")
+                            st.write(message["content"])
 
                     except Exception as e:
                         st.error(f"Error: {e}")
-else:
-    st.info("👆 Please enter your API key to begin.")
