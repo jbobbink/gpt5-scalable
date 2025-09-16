@@ -2,7 +2,6 @@ import streamlit as st
 from openai import OpenAI
 
 st.set_page_config(page_title="GPT-5 Prompt Runner", layout="wide")
-
 st.title("🔎 GPT-5 Prompt Runner with Web Search")
 
 # --- API Key input ---
@@ -35,21 +34,23 @@ if api_key:
                                 {"role": "system", "content": "You are a helpful assistant."},
                                 {"role": "user", "content": prompt}
                             ],
-                            tools=[{"type": "web_search"}],  # enable web search tool
-                            tool_choice="auto",  # let GPT decide
-                            include=["web_search_call.action.sources"],  # include sources
+                            tools=[{"type": "web_search"}],
+                            tool_choice="auto",  # let GPT decide when to search
                         )
 
+                        # Get model's answer
                         answer = response.choices[0].message.content
                         st.markdown("**Response:**")
                         st.write(answer)
 
-                        # --- Show sources if available ---
-                        if hasattr(response.choices[0].message, "tool_calls"):
-                            for tool_call in response.choices[0].message.tool_calls:
-                                if tool_call.function.name == "web_search":
-                                    st.markdown("**Sources:**")
-                                    st.json(tool_call.function.arguments)
+                        # Show web search sources if available
+                        sources = getattr(response.choices[0].message, "refusal", None)
+                        if hasattr(response, "output") and hasattr(response.output, "references"):
+                            refs = response.output.references
+                            if refs:
+                                st.markdown("**Sources:**")
+                                for ref in refs:
+                                    st.write(f"- {ref['url']}")
 
                     except Exception as e:
                         st.error(f"Error: {e}")
